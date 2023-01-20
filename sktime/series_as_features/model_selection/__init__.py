@@ -6,9 +6,11 @@ __author__ = ["mloning"]
 __all__ = [
     "SingleSplit",
     "PresplitFilesCV",
+    "StratifiedCV",
 ]
 
 from sktime.series_as_features.model_selection._split import (
     PresplitFilesCV,
     SingleSplit,
+    StratifiedCV,
 )

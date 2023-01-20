@@ -7,6 +7,7 @@ __all__ = ["PresplitFilesCV", "SingleSplit"]
 
 import numpy as np
 import pandas as pd
+from sktime.utils.sampling import stratified_resample
 from sklearn.model_selection import train_test_split
 
 
@@ -161,3 +162,17 @@ class SingleSplit:
     def get_n_splits():
         """Return the number of splits (1)."""
         return 1
+    
+class StratifiedCV:
+    def __init__(self, total_folds):
+        self.total_folds = total_folds
+
+    def apply(self, X_train, y_train, X_test, y_test, fold):
+        if fold != 0:
+            X_train, y_train, X_test, y_test = stratified_resample(X_train, y_train, X_test, y_test, fold)
+            return X_train, y_train, X_test, y_test
+        else:
+            return X_train, y_train, X_test, y_test
+
+    def get_n_splits(self):
+        return self.total_folds

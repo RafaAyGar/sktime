@@ -5,7 +5,6 @@ Used in experiments to get deterministic resamples.
 """
 
 import random
-
 import numpy as np
 import pandas as pd
 import sklearn.utils

@@ -69,6 +69,18 @@ class UEADataset(HDDBaseDataset):
         data = pd.concat([data_train, data_test], axis=0, keys=["train", "test"])
 
         return data
+    
+    def load_crude(self):
+        """Load dataset returning x_train, y_train, x_test, y_test."""
+
+        X_train, y_train = load_from_tsfile_to_dataframe(
+            self._train_path, return_separate_X_and_y=True
+        )
+        X_test, y_test = load_from_tsfile_to_dataframe(
+            self._test_path, return_separate_X_and_y=True
+        )
+
+        return X_train, y_train, X_test, y_test
 
 
 class RAMDataset(BaseDataset):

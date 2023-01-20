@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
-"""RandOm Convolutional KErnel Transform (Rocket).
+"""Ordinal RandOm Convolutional KErnel Transform (Rocket).
 
-Pipeline classifier using the ROCKET transformer and, in the case of nominal classification, a RidgeClassifierCV,
- and a LogisticAT in the case of ordinal classification (O-Rocket).
+Pipeline classifier using the ROCKET transformer and LogisticAT estimator.
 """
 
-__author__ = ["MatthewMiddlehurst", "victordremov", "fkiraly"]
+__author__ = ["RafaelAyllon"]
 __all__ = ["RocketClassifier"]
 
 import numpy as np
-from sklearn.linear_model import RidgeClassifierCV
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, make_scorer
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
 
 from sktime.classification._delegate import _DelegatedClassifier
+from sktime.pipeline import make_pipeline
 from sktime.transformations.panel.rocket import (
     MiniRocket,
     MiniRocketMultivariate,
@@ -126,7 +125,6 @@ class RocketClassifier(_DelegatedClassifier):
         max_dilations_per_kernel=32,
         n_features_per_kernel=4,
         use_multivariate="auto",
-        classification="nominal",
         n_jobs=1,
         random_state=None,
     ):
@@ -135,7 +133,6 @@ class RocketClassifier(_DelegatedClassifier):
         self.max_dilations_per_kernel = max_dilations_per_kernel
         self.n_features_per_kernel = n_features_per_kernel
         self.use_multivariate = use_multivariate
-        self.classification = classification
 
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -174,47 +171,42 @@ class RocketClassifier(_DelegatedClassifier):
                 f"Invalid rocket_transform string, must be one of "
                 f"{self.VALID_ROCKET_STRINGS}, but found {rocket_transform}"
             )
-        
-        if self.classification == "nominal":
-            from sktime.pipeline import make_pipeline # lazy imports
-            self.multivar_rocket_ = make_pipeline(
-                multivar_rocket,
-                StandardScaler(with_mean=False),
-                RidgeClassifierCV(alphas=np.logspace(-3, 3, 10)),
+
+        scorer = make_scorer(mean_absolute_error, greater_is_better=True)
+        hyperparameter_space = {
+            'alpha': list(np.logspace(-3, 3, 7))
+        }
+
+        self.multivar_rocket_ = make_pipeline(
+            multivar_rocket,
+            StandardScaler(with_mean=False),
+            GridSearchCV(
+                LogisticAT(
+                    n_jobs=self._threads_to_use,
+                    max_iter = self.max_iter
+                ), 
+                hyperparameter_space, 
+                scoring=scorer,
+                error_score="raise",
+                n_jobs=1,
+                cv=5
             )
-            self.univar_rocket_ = make_pipeline(
-                univar_rocket,
-                StandardScaler(with_mean=False),
-                RidgeClassifierCV(alphas=np.logspace(-3, 3, 10)),
+        )
+        self.univar_rocket_ = make_pipeline(
+            univar_rocket,
+            StandardScaler(with_mean=False),
+            GridSearchCV(
+                LogisticAT(
+                    n_jobs=self._threads_to_use,
+                    max_iter = self.max_iter
+                ), 
+                hyperparameter_space, 
+                scoring=scorer,
+                error_score="raise",
+                n_jobs=1,
+                cv=5
             )
-        elif self.classification == "ordinal":
-            from sklearn.pipeline import make_pipeline # lazy imports
-            scorer = make_scorer(mean_absolute_error, greater_is_better=False)
-            hyperparameter_space = {'alpha': list(np.logspace(-3, 3, 10))}
-            self.multivar_rocket_ = make_pipeline(
-                multivar_rocket,
-                StandardScaler(with_mean=False),
-                GridSearchCV(
-                    LogisticAT(n_jobs=self._threads_to_use), 
-                    hyperparameter_space, 
-                    scoring=scorer,
-                    error_score="raise",
-                    n_jobs=1,
-                    cv=5
-                ),
-            )
-            self.univar_rocket_ = make_pipeline(
-                univar_rocket,
-                StandardScaler(with_mean=False),
-                GridSearchCV(
-                    LogisticAT(n_jobs=self._threads_to_use), 
-                    hyperparameter_space, 
-                    scoring=scorer,
-                    error_score="raise",
-                    n_jobs=1,
-                    cv=5
-                ),
-            )
+        )
 
         if not use_multivariate:
             self.set_tags(**{"capability:multivariate": False})
