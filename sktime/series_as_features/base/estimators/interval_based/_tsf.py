@@ -22,6 +22,7 @@ import numpy as np
 from joblib import Parallel, delayed
 from sklearn.utils.multiclass import class_distribution
 from sklearn.utils.validation import check_random_state
+from sklearn.tree import DecisionTreeClassifier
 
 from sktime.base._base import _clone_estimator
 from sktime.utils.slope_and_trend import _slope
@@ -35,17 +36,20 @@ class BaseTimeSeriesForest:
         self,
         min_interval=3,
         n_estimators=200,
+        criterion="entropy",
         n_jobs=1,
         random_state=None,
     ):
         super(BaseTimeSeriesForest, self).__init__(
-            self._base_estimator,
+            estimator=DecisionTreeClassifier(criterion=criterion),
+            base_estimator=DecisionTreeClassifier(criterion=criterion),
             n_estimators=n_estimators,
         )
 
         self.random_state = random_state
         self.n_estimators = n_estimators
         self.min_interval = min_interval
+        self.criterion = criterion
         self.n_jobs = n_jobs
         # The following set in method fit
         self.n_classes = 0

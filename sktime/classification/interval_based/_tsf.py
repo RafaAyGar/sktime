@@ -10,7 +10,6 @@ __all__ = ["TimeSeriesForestClassifier"]
 import numpy as np
 from joblib import Parallel, delayed
 from sklearn.ensemble._forest import ForestClassifier
-from sklearn.tree import DecisionTreeClassifier
 
 from sktime.classification.base import BaseClassifier
 from sktime.series_as_features.base.estimators.interval_based import (
@@ -83,18 +82,19 @@ class TimeSeriesForestClassifier(
     >>> y_pred = clf.predict(X_test)
     """
 
-    _base_estimator = DecisionTreeClassifier(criterion="entropy")
 
     def __init__(
         self,
         min_interval=3,
         n_estimators=200,
+        criterion="entropy",
         n_jobs=1,
         random_state=None,
     ):
         super(TimeSeriesForestClassifier, self).__init__(
             min_interval=min_interval,
             n_estimators=n_estimators,
+            criterion = criterion,
             n_jobs=n_jobs,
             random_state=random_state,
         )

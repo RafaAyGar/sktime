@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from scipy.stats import ranksums, ttest_ind
-
+import matplotlib.pyplot as plt
+from datetime import datetime
 from sktime.benchmarking.base import BaseResults
 from sktime.exceptions import NotEvaluatedError
 from sktime.utils.validation._dependencies import _check_soft_dependencies
@@ -60,7 +61,31 @@ class Evaluator:
         self._check_is_evaluated()
         return self._metrics_by_strategy_dataset
 
-    def evaluate(self, metric, train_or_test="test", cv_fold="all"):
+    def get_time(self, start_time, end_time):
+        start_time = start_time.split(".")[0]
+        end_time = end_time.split(".")[0]
+        start_date = datetime.strptime(start_time.split(".")[0], '%Y-%m-%d %H:%M:%S')
+        end_date = datetime.strptime(end_time.split(".")[0], '%Y-%m-%d %H:%M:%S')
+        time = (end_date - start_date).total_seconds()
+        return time
+
+    def std_err(self, a):
+        return ( np.std(a, ddof=0) / (np.sqrt(len(a))) )
+
+    def group_df_by(self, df, column_list):
+        stds = (
+            df.groupby(column_list, as_index=False).agg(self.std_err)
+        )[self.metric_mean_table_names]
+        for mean_name, std_name in zip(self.metric_mean_table_names, self.metric_std_table_names):
+            stds = stds.rename(columns={mean_name:std_name})  
+        grouped_results = (
+            df.groupby(column_list, as_index=False)
+            .agg(np.mean)
+        )
+        grouped_results = pd.concat([grouped_results, stds], axis=1)
+        return grouped_results
+
+    def evaluate(self, metric, train_or_test="test", cv_fold="all", metric_wlt="mae_mean", strat_names_mapping=None):
         """Evaluate estimator performance.
 
         Calculates the average prediction error per estimator as well as the
@@ -80,56 +105,105 @@ class Evaluator:
                 f"but found: {type(cv_fold)}"
             )
 
+        total_results = len(cv_folds)*(len(self.results.strategy_names))*(len(self.results.dataset_names))
+        actual_results = 0
+
         # load all predictions
         for cv_fold in cv_folds:
             for result in self.results.load_predictions(
                 cv_fold=cv_fold, train_or_test=train_or_test
             ):
-                # unwrap result object
+                print(f"- Progress {actual_results}/{total_results}", end="\r")
+                actual_results += 1
+
                 strategy_name = result.strategy_name
+                strategy_name_without_number = ''.join([i for i in strategy_name if not i.isdigit()])
+
+                if not strat_names_mapping is None:
+                    if strategy_name_without_number in strat_names_mapping.keys():
+                        strategy_name_without_number = strat_names_mapping[strategy_name_without_number]
+
                 dataset_name = result.dataset_name
-                # index = result.index
                 y_true = result.y_true
                 y_pred = result.y_pred
-                # y_proba = result.y_proba
+                fit_start = result.fit_estimator_start_time
+                fit_end = result.fit_estimator_end_time
 
-                # compute metric
-                mean, stderr = metric.compute(y_true, y_pred)
-
-                # store results
                 metric_dict = {
                     "dataset": dataset_name,
-                    "strategy": strategy_name,
-                    "cv_fold": cv_fold,
-                    self._get_column_name(metric.name, suffix="mean"): mean,
-                    self._get_column_name(metric.name, suffix="stderr"): stderr,
+                    "strategy": strategy_name_without_number,
+                    "cv_fold": cv_fold
                 }
+
+                fit_time = self.get_time(fit_start, fit_end)
+                metric_dict['Time (s)'] = fit_time
+
+                # compute metric
+                if isinstance(metric, list):
+                    for m in metric:
+                        mean = m.compute(y_true, y_pred)        
+                        metric_dict[self._get_column_name(m.name, suffix="mean")] = mean
+                        # metric_dict[self._get_column_name(m.name, suffix="stderr")] = stderr
+                        self._metric_names.append(m.name)
+                else:
+                    mean = metric.compute(y_true, y_pred)
+                    metric_dict[self._get_column_name(metric.name, suffix="mean")] = mean
+                    # metric_dict[self._get_column_name(metric.name, suffix="stderr")] = stderr
+                    self._metric_names.append(metric.name)
+
                 self._metric_dicts.append(metric_dict)
 
         # update metrics dataframe with computed metrics
         metrics = pd.DataFrame(self._metric_dicts)
         self._metrics = self._metrics.merge(metrics, how="outer")
 
-        # aggregate results
-        # aggregate over cv folds
-        metrics_by_strategy_dataset = (
-            self._metrics.groupby(["dataset", "strategy"], as_index=False)
-            .agg(np.mean)
-            .drop(columns="cv_fold")
-        )
+        self.metric_mean_table_names = []
+        self.metric_std_table_names = []
+        if isinstance(metric, list):
+            for m in metric:
+                self.metric_mean_table_names.append(m.name + "_mean")
+                self.metric_std_table_names.append(m.name + "_std")
+        else:
+            self.metric_mean_table_names.append(metric.name + "_mean")
+            self.metric_std_table_names.append(metric.name + "_std")
+
+        print(self.metrics.columns)
+        self._metrics_by_dataset_fold = self.group_df_by(self.metrics, ["dataset", "strategy", "cv_fold"])
+
+        metrics_by_strategy_dataset = self.group_df_by(self.metrics, ["dataset", "strategy"]).drop(columns="cv_fold")
         self._metrics_by_strategy_dataset = self._metrics_by_strategy_dataset.merge(
             metrics_by_strategy_dataset, how="outer"
         )
+
         # aggregate over cv folds and datasets
-        metrics_by_strategy = metrics_by_strategy_dataset.groupby(
-            ["strategy"], as_index=False
-        ).agg(np.mean)
+        metrics_by_strategy = self.group_df_by(self.metrics, ["strategy"]).drop(columns="cv_fold")
         self._metrics_by_strategy = self._metrics_by_strategy.merge(
             metrics_by_strategy, how="outer"
         )
 
-        # append metric names
-        self._metric_names.append(metric.name)
+        d = self._metrics_by_strategy_dataset
+        for strat1 in self._metrics_by_strategy['strategy']:
+            col = "VS " + strat1
+            s1 = d[d['strategy']==strat1][metric_wlt].values
+            win_losses = []
+            for strat2 in self._metrics_by_strategy['strategy']:
+                if strat1 == strat2:
+                    win_losses.append("---")
+                    continue
+                s2 = d[d['strategy']==strat2][metric_wlt].values
+                w = 0
+                l = 0
+                t = 0
+                for r1, r2 in zip(s1, s2):
+                    if r1 > r2:
+                        w += 1
+                    elif r1 < r2:
+                        l += 1
+                    else:
+                        t += 1
+                wlt_string = str(w) + "W | " + str(l) + "L | " + str(t) + "T"
+                win_losses.append(wlt_string)
+            self._metrics_by_strategy[col] = win_losses
 
         # return aggregated results
         return self._metrics_by_strategy
@@ -535,32 +609,37 @@ class Evaluator:
         # # return aggregated results
         # return self._metrics_by_strategy
 
-    def plot_critical_difference_diagram(self, metric_name=None, alpha=0.1):
+    def plot_critical_difference_diagram(self, metric_name=None, alpha=0.1, data="default", save_file=None):
         """Plot critical difference diagrams.
 
         References
         ----------
         original implementation by Aaron Bostrom, modified by Markus Löning.
         """
-        _check_soft_dependencies("matplotlib")
-
-        import matplotlib.pyplot as plt  # noqa: E402
+        if isinstance(data, str) and data == "default":
+            dataset = self.metrics_by_strategy_dataset
+        else:
+            dataset = data
 
         self._check_is_evaluated()
         metric_name = self._validate_metric_name(metric_name)
         column = self._get_column_name(metric_name, suffix="mean")
+
         data = (
-            self.metrics_by_strategy_dataset.copy()
+            dataset.copy()
             .loc[:, ["dataset", "strategy", column]]
             .pivot(index="strategy", columns="dataset", values=column)
+            # .sort_values(by=["strategy"], ascending=False)
             .values
         )
 
+        if "mae" in metric_name:
+            data = data * (-1)
         n_strategies, n_datasets = data.shape  # [N,k] = size(s); correct
-        labels = self.results.strategy_names
+        labels = list(dataset['strategy'])
 
-        r = np.argsort(data, axis=0)
-        S = np.sort(data, axis=0)
+        r = np.argsort(data, axis=0)[::-1]
+        S = np.sort(data, axis=0)[::-1]
         idx = n_strategies * np.tile(np.arange(n_datasets), (n_strategies, 1)).T + r.T
         R = np.asfarray(np.tile(np.arange(n_strategies) + 1, (n_datasets, 1)))
         S = S.T
@@ -764,8 +843,15 @@ class Evaluator:
                 linewidth=6,
                 color="black",
             )
+
+        fig.dpi = 600
+
+        if not save_file is None:
+            fig.savefig(save_file, pad_inches = 0, bbox_inches='tight')
+
         plt.show()
         return fig, ax
+
 
     def _get_column_name(self, metric_name, suffix="mean"):
         """Get column name in computed metrics dataframe."""

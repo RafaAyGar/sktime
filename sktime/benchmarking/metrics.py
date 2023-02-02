@@ -28,18 +28,18 @@ class PairwiseMetric(BaseMetric):
     def compute(self, y_true, y_pred):
         """Compute metric and standard error."""
         # compute mean
-        mean = self.func(y_true, y_pred)
+        mean = self.func(y_true, y_pred, **self.kwargs)
 
         # compute stderr based on pairwise metrics
-        n_instances = len(y_true)
-        pointwise_metrics = np.array(
-            [self.func([y_true[i]], [y_pred[i]]) for i in range(n_instances)]
-        )
-        stderr = np.std(pointwise_metrics) / np.sqrt(
-            n_instances - 1
-        )  # sample standard error of the mean
+        # n_instances = len(y_true)
+        # pointwise_metrics = np.array(
+        #     [self.func([y_true[i]], [y_pred[i]]) for i in range(n_instances)]
+        # )
+        # stderr = np.std(pointwise_metrics) / np.sqrt(
+        #     n_instances - 1
+        # )  # sample standard error of the mean
 
-        return mean, stderr
+        return mean
 
 
 class AggregateMetric(BaseMetric):

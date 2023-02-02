@@ -229,6 +229,28 @@ class BaseSupervisedLearningStrategy(BaseStrategy):
         # predict
         return self.estimator.predict(X)
 
+    def predict_proba(self, data):
+        """
+        Predict probas using the given test data.
+
+        Parameters
+        ----------
+        data : a pandas.DataFrame
+            Dataframe with feature and target variables as specified in task
+            passed to ``fit``.
+
+
+        Returns
+        -------
+        y_probas : pandas.Series
+            Returns the series of predicted probabilities values.
+        """
+
+        # select features
+        X = data[self._task.features]
+        # predict
+        return self.estimator.predict_proba(X)
+
 
 class TSCStrategy(BaseSupervisedLearningStrategy):
     """

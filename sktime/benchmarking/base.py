@@ -126,6 +126,56 @@ class BaseResults:
             for dataset_name in self.dataset_names:
                 yield strategy_name, dataset_name
 
+    ### rayllon ###
+    def limit_results_to_those_datasets_from_path(self, experiment_datasets_path, runs, selected_strategies="from_path"):
+        self.strategy_names = []
+        self.dataset_names = []
+    
+        strategies = []
+        if selected_strategies == "from_path":
+            if type(self.path) == list:
+                for i_path in self.path:
+                    strategies += os.listdir(i_path)
+            else:
+                strategies = os.listdir(self.path)
+        else:
+            strategies = []
+            if type(self.path) == list:
+                for i_path in self.path:
+                    for strat_name in os.listdir(i_path):
+                        for selected_strat_name in selected_strategies.keys():
+                            if selected_strat_name in strat_name:
+                                strategies.append(strat_name)
+            else:                    
+                for strat_name in os.listdir(self.path):
+                    for selected_strat_name in selected_strategies.keys():
+                        if selected_strat_name == strat_name[:-1]:
+                            strategies.append(strat_name)
+
+        strategies.sort()
+        valid_runs = list(range(runs))
+
+        print("STRATEGIES -----------------------------------")
+        for strat in strategies:
+            if not ".pickle" in strat:
+                if int(strat[-1]) in valid_runs:
+                    self.strategy_names.append(strat)
+                    print("\t-",strat)
+        p = self.strategy_names[0]
+
+        datasets_results_path = os.path.join(self.path, p)
+        datasets = os.listdir(datasets_results_path)
+        datasets.sort()
+        
+        print("DATASETS -----------------------------------")
+        for data in datasets:
+            if data in os.listdir(experiment_datasets_path):
+                self.dataset_names.append(data)
+                print("\t-",data)
+        print("New Number of strategies:", len(self.strategy_names))
+        print("New Number of datasets:", len(self.dataset_names))
+    ################
+
 
 class HDDBaseResults(BaseResults):
     """HDD results."""
