@@ -58,7 +58,7 @@ class InceptionTimeClassifier(BaseDeepClassifier, InceptionTimeNetwork):
             model_save_directory=None,
     ):
         super(InceptionTimeClassifier, self).__init__(
-            model_name=model_name, model_save_directory=model_save_directory
+            # model_name=model_name, model_save_directory=model_save_directory
         )
 
         self.verbose = verbose
@@ -77,6 +77,8 @@ class InceptionTimeClassifier(BaseDeepClassifier, InceptionTimeNetwork):
         self.callbacks = callbacks
         self.random_state = random_state
         self.verbose = verbose
+        self.model_name = model_name
+        self.model_save_directory = model_save_directory
         self._is_fitted = False
 
     def build_model(self, input_shape, nb_classes, **kwargs):
@@ -125,7 +127,7 @@ class InceptionTimeClassifier(BaseDeepClassifier, InceptionTimeNetwork):
 
         return model
 
-    def fit(self, X, y):
+    def _fit(self, X, y):
         """
         Fit the classifier on the training set (X, y)
 
@@ -163,11 +165,13 @@ class InceptionTimeClassifier(BaseDeepClassifier, InceptionTimeNetwork):
 
         check_random_state(self.random_state)
         self.input_shape = X.shape[1:]
+        
+        self.models = []
         for _ in range(self.ensemble_size):
-            self.model = self.build_model(self.input_shape, self.nb_classes)
+            model = self.build_model(self.input_shape, self.n_classes_)
             if self.verbose:
-                self.model.summary()
-            self.history = self.model.fit(
+                model.summary()
+            self.history = model.fit(
                 X,
                 y_onehot,
                 batch_size=self.batch_size,
@@ -175,6 +179,7 @@ class InceptionTimeClassifier(BaseDeepClassifier, InceptionTimeNetwork):
                 verbose=self.verbose,
                 callbacks=self.callbacks,
             )
+            self.models.append(model)
 
         self._is_fitted = True
         

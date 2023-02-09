@@ -8,11 +8,8 @@ from tensorflow.python import keras as keras_c
 
 from sktime.classification.deep_learning.base import BaseDeepClassifier
 from sktime.networks._inceptiontime import InceptionTimeNetwork
-from sktime.utils import check_and_clean_data, \
-    check_and_clean_validation_data
 
 from sklearn.utils import check_random_state
-from sklearn.utils.class_weight import compute_sample_weight
 
 from .activation_layers.clm import CLM
 
@@ -75,7 +72,7 @@ class InceptionTimeOrdinalClassifier(BaseDeepClassifier, InceptionTimeNetwork):
             model_save_directory=None
     ):
         super(InceptionTimeOrdinalClassifier, self).__init__(
-            model_name=model_name, model_save_directory=model_save_directory
+            # model_name=model_name, model_save_directory=model_save_directory
         )
 
         self.verbose = verbose
@@ -93,6 +90,8 @@ class InceptionTimeOrdinalClassifier(BaseDeepClassifier, InceptionTimeNetwork):
         self.callbacks = callbacks
         self.random_state = random_state
         self.verbose = verbose
+        self.model_name = model_name
+        self.model_save_directory = model_save_directory
         self._is_fitted = False
 
 
@@ -201,7 +200,7 @@ class InceptionTimeOrdinalClassifier(BaseDeepClassifier, InceptionTimeNetwork):
 
         self.models = []
         for _ in range(self.ensemble_size):
-            model = self.build_model(self.input_shape, self.nb_classes)
+            model = self.build_model(self.input_shape, self.n_classes_)
             if self.verbose:    
                 model.summary()
             self.history = model.fit(  

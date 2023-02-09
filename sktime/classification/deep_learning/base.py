@@ -80,14 +80,14 @@ class BaseDeepClassifier(BaseClassifier, ABC):
         return self.history.history if self.history is not None else None
 
     def _predict(self, X, **kwargs):
-        probs = self._predict_proba(X, **kwargs)
         rng = check_random_state(self.random_state)
+        probs = self._predict_proba(X, **kwargs)
         return np.array(
             [
                 self.classes_[int(rng.choice(np.flatnonzero(prob == prob.max())))]
                 for prob in probs
             ]
-        )
+        )        
 
     def _predict_proba(self, X, **kwargs):
         """Find probability estimates for each class for all cases in X.
@@ -104,14 +104,28 @@ class BaseDeepClassifier(BaseClassifier, ABC):
         """
         # Transpose to work correctly with keras
         X = X.transpose((0, 2, 1))
-        probs = self.model_.predict(X, self.batch_size, **kwargs)
+        if hasattr(self, 'ensemble_size'):
+            ensemble_probas = None
+            for i in range(self.ensemble_size):
+                probs = self.models[i].predict(X, batch_size=self.batch_size, **kwargs)
+                # check if binary classification
+                if probs.shape[1] == 1:
+                    # first column is probability of class 0 and second is of class 1
+                    probs = np.hstack([1 - probs, probs])
+                probs = probs / probs.sum(axis=1, keepdims=1)
+                if ensemble_probas is None:
+                    ensemble_probas = np.array(probs) if type(probs) != np.ndarray else probs
+                else:
+                    ensemble_probas += np.array(probs) if type(probs) != np.ndarray else probs
+            ensemble_probas /= self.ensemble_size
+            return ensemble_probas
 
-        # check if binary classification
-        if probs.shape[1] == 1:
-            # first column is probability of class 0 and second is of class 1
-            probs = np.hstack([1 - probs, probs])
-        probs = probs / probs.sum(axis=1, keepdims=1)
-        return probs
+        else:
+            probs = self.model_.predict(X, self.batch_size, **kwargs)
+            if probs.shape[1] == 1:
+                probs = np.hstack([1 - probs, probs])
+            probs = probs / probs.sum(axis=1, keepdims=1)
+            return probs
 
     def convert_y_to_keras(self, y):
         """Convert y to required Keras format."""
